@@ -28,7 +28,6 @@ import java.util.List;
 import org.gradle.api.GradleException;
 import org.gradle.api.internal.file.CopyActionProcessingStreamAction;
 import org.gradle.api.internal.project.ProjectInternal;
-import org.gradle.internal.impldep.org.eclipse.jgit.gitrepo.RepoProject;
 import org.gradle.util.ConfigureUtil;
 
 import com.inet.gradle.setup.abstracts.AbstractSetupTask;
@@ -47,7 +46,7 @@ public class Msi extends AbstractSetupTask {
 
     private boolean                    only32bit;
 
-    private Object                     bannerBmp, dialogBmp, wxsTemplate, multiInstanceScript;
+    private Object                     bannerBmp, dialogBmp, wxsTemplate, wxsOverride, multiInstanceScript;
 
     private List<String>               languages;
 
@@ -67,8 +66,6 @@ public class Msi extends AbstractSetupTask {
     private boolean                    runAfterIsOptional = false;
 
     private List<MsiLocalizedResource> i18n               = new ArrayList<>();
-
-    private List<WxsCopyFile>          copyFiles          = new ArrayList<>();
 
     /**
      * Create a new instance.
@@ -248,6 +245,25 @@ public class Msi extends AbstractSetupTask {
      */
     public void setWxsTemplate( Object wxsTemplate ) {
         this.wxsTemplate = wxsTemplate;
+    }
+
+    /**
+     * Get a URL to a *.wxs file for the WIX Toolset.
+     */
+    public URL getWxsOverride() throws MalformedURLException {
+        if( wxsOverride != null ) {
+            return getProject().file( wxsOverride ).toURI().toURL();
+        }
+        return null;
+    }
+
+    /**
+     * Set an optional *.wxs file to be merged into the generated file.
+     *
+     * @param wxsOverride the file location
+     */
+    public void setWxsOverride( Object wxsOverride ) {
+        this.wxsOverride = wxsOverride;
     }
 
     /**
@@ -476,15 +492,6 @@ public class Msi extends AbstractSetupTask {
      */
     public void i18n( Object localization ) {
         MsiLocalizedResource.addLocalizedResource( getSetupBuilder(), getTemporaryDir(), i18n, localization );
-    }
-
-    public List<WxsCopyFile> getCopyFiles() {
-        return Collections.unmodifiableList(copyFiles);
-    }
-
-    /** Add a CopyFile element. */
-    public void copyFiles( Object copyFile ) {
-        copyFiles.add( ConfigureUtil.configure( (Closure<?>) copyFile, new WxsCopyFile() ) );
     }
 
     /**

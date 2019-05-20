@@ -24,6 +24,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.io.StringReader;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -44,12 +45,13 @@ import javax.swing.text.DefaultStyledDocument;
 import javax.swing.text.EditorKit;
 import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyleConstants;
+import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 
 import org.gradle.api.GradleException;
-import org.gradle.api.file.RelativePath;
 import org.gradle.api.internal.file.CopyActionProcessingStreamAction;
 import org.gradle.api.internal.file.copy.FileCopyDetailsInternal;
+import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 
 import com.inet.gradle.setup.SetupBuilder;
@@ -60,7 +62,8 @@ import com.inet.gradle.setup.abstracts.ProtocolHandler;
 import com.inet.gradle.setup.abstracts.Service;
 import com.inet.gradle.setup.util.ResourceUtils;
 import com.inet.gradle.setup.util.XmlFileBuilder;
-import org.w3c.dom.Node;
+import org.xml.sax.InputSource;
+import org.xml.sax.SAXException;
 
 /**
  * Builder for a *.wsx file. A *.wsx file is a XML that described MSI setup and is needed for the Wix tool.
@@ -194,7 +197,6 @@ class WxsFileBuilder extends XmlFileBuilder<Msi> {
         addRunBeforeUninstall();
         addRunAfter();
         addDeleteFiles();
-        addCopyFiles();
         addPreAndPostScripts();
 
         //Feature
@@ -203,6 +205,7 @@ class WxsFileBuilder extends XmlFileBuilder<Msi> {
             getOrCreateChildById( feature, "ComponentRef", compID );
         }
 
+        mergePostWxs();
         save();
     }
 
@@ -1147,29 +1150,22 @@ class WxsFileBuilder extends XmlFileBuilder<Msi> {
     }
 
     /**
-     * Add a {@code CopyFiles} node and add entries for each element in {@link Msi#getCopyFiles()}.
+     * Merge custom all WXS code into the generated document.
      */
-    private void addCopyFiles() {
-        List<WxsCopyFile> copyFiles = task.getCopyFiles();
+    private void mergePostWxs() {
+        try {
+            URL wxsOverride = task.getWxsOverride();
+            if ( wxsOverride == null ) return;
 
-        copyFiles.forEach( copyFile -> {
-            if ( copyFile.getSourceFileProperty() == null ) {
-                throw new UnsupportedOperationException( "Only sourceFileProperty is supported yet" );
-            }
+            Element rootElement = DocumentBuilderFactory.newInstance()
+                .newDocumentBuilder()
+                .parse( wxsOverride.toURI().toString() )
+                .getDocumentElement();
 
-            String sourceFileProperty = copyFile.getSourceFileProperty();
-            RelativePath targetFile = new RelativePath( true, copyFile.getTargetFile().split( "/" ) );
-
-            String targetFileId = fileId( pathID( targetFile.getSegments() ), targetFile.getLastName() );
-
-            Node copyFilesComponent = getComponent( installDir, "copyFiles" );
-            Element copyFileElement = getOrCreateChildById( copyFilesComponent, "CopyFile", targetFileId );
-            addAttributeIfNotExists( copyFileElement, "DestinationDirectory", targetFile.getParent().getPathString() );
-            addAttributeIfNotExists( copyFileElement, "DestinationName", targetFile.getLastName() );
-            addAttributeIfNotExists( copyFileElement, "SourceProperty", sourceFileProperty );
-
-            getOrCreateChild( copyFilesComponent, "CreateFolder" );
-        } );
+            doc.importNode( rootElement, true );
+        } catch( SAXException | IOException | ParserConfigurationException | URISyntaxException e ) {
+            throw new RuntimeException( e );
+        }
     }
 
     /**
