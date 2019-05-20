@@ -28,6 +28,7 @@ import java.util.List;
 import org.gradle.api.GradleException;
 import org.gradle.api.internal.file.CopyActionProcessingStreamAction;
 import org.gradle.api.internal.project.ProjectInternal;
+import org.gradle.internal.impldep.org.eclipse.jgit.gitrepo.RepoProject;
 import org.gradle.util.ConfigureUtil;
 
 import com.inet.gradle.setup.abstracts.AbstractSetupTask;
@@ -66,6 +67,8 @@ public class Msi extends AbstractSetupTask {
     private boolean                    runAfterIsOptional = false;
 
     private List<MsiLocalizedResource> i18n               = new ArrayList<>();
+
+    private List<WxsCopyFile>          copyFiles          = new ArrayList<>();
 
     /**
      * Create a new instance.
@@ -473,6 +476,15 @@ public class Msi extends AbstractSetupTask {
      */
     public void i18n( Object localization ) {
         MsiLocalizedResource.addLocalizedResource( getSetupBuilder(), getTemporaryDir(), i18n, localization );
+    }
+
+    public List<WxsCopyFile> getCopyFiles() {
+        return Collections.unmodifiableList(copyFiles);
+    }
+
+    /** Add a CopyFile element. */
+    public void copyFiles( Object copyFile ) {
+        copyFiles.add( ConfigureUtil.configure( (Closure<?>) copyFile, new WxsCopyFile() ) );
     }
 
     /**

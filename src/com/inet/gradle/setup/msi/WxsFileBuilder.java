@@ -47,6 +47,7 @@ import javax.swing.text.StyleConstants;
 import javax.xml.parsers.ParserConfigurationException;
 
 import org.gradle.api.GradleException;
+import org.gradle.api.file.RelativePath;
 import org.gradle.api.internal.file.CopyActionProcessingStreamAction;
 import org.gradle.api.internal.file.copy.FileCopyDetailsInternal;
 import org.w3c.dom.Element;
@@ -59,6 +60,7 @@ import com.inet.gradle.setup.abstracts.ProtocolHandler;
 import com.inet.gradle.setup.abstracts.Service;
 import com.inet.gradle.setup.util.ResourceUtils;
 import com.inet.gradle.setup.util.XmlFileBuilder;
+import org.w3c.dom.Node;
 
 /**
  * Builder for a *.wsx file. A *.wsx file is a XML that described MSI setup and is needed for the Wix tool.
@@ -192,6 +194,7 @@ class WxsFileBuilder extends XmlFileBuilder<Msi> {
         addRunBeforeUninstall();
         addRunAfter();
         addDeleteFiles();
+        addCopyFiles();
         addPreAndPostScripts();
 
         //Feature
@@ -361,8 +364,8 @@ class WxsFileBuilder extends XmlFileBuilder<Msi> {
     private String addFile( File file, String[] segments ) {
         Element parent = getDirectory( segments );
 
-        String pathID = id( segments, segments.length - 1 );
-        String compID = id( ( pathID.length() > 0 ? pathID : "root" ) + "_Comp");
+        String pathID = pathID( segments );
+        String compID = id( (pathID.length() > 0 ? pathID : "root") + "_Comp" );
 
         Element component = getComponent( parent, compID );
 
@@ -409,7 +412,7 @@ class WxsFileBuilder extends XmlFileBuilder<Msi> {
      *            added to improve the performance.
      */
     private String addFile( Element component, File file, String pathID, String name, boolean isAddFiles ) {
-        String id = id( (pathID.length() > 0 ? pathID + '\\' : "") + name );
+        String id = fileId( pathID, name );
         if( isAddFiles ) {
             Element fileEl = getOrCreateChildById( component, "File", id );
             addAttributeIfNotExists( fileEl, "Source", file.getAbsolutePath() );
@@ -418,6 +421,14 @@ class WxsFileBuilder extends XmlFileBuilder<Msi> {
             getOrCreateChild( component, "CreateFolder" );
         }
         return id;
+    }
+
+    private String pathID( String[] fileSegments ) {
+        return id( fileSegments, fileSegments.length - 1 );
+    }
+
+    private String fileId( String pathID, String name ) {
+        return id( (pathID.length() > 0 ? pathID + '\\' : "") + name );
     }
 
     /**
@@ -552,7 +563,6 @@ class WxsFileBuilder extends XmlFileBuilder<Msi> {
     /**
      * Add an icon in Add/Remove Programs
      *
-     * @param appDirRef
      * @throws IOException if an error occur on reading the image files
      */
     private void addIcon() throws IOException {
@@ -1134,6 +1144,32 @@ class WxsFileBuilder extends XmlFileBuilder<Msi> {
             addRun( run, id, "ignore", null );
             addCustomActionToSequence( id, true, "RemoveFolders", true, null );
         }
+    }
+
+    /**
+     * Add a {@code CopyFiles} node and add entries for each element in {@link Msi#getCopyFiles()}.
+     */
+    private void addCopyFiles() {
+        List<WxsCopyFile> copyFiles = task.getCopyFiles();
+
+        copyFiles.forEach( copyFile -> {
+            if ( copyFile.getSourceFileProperty() == null ) {
+                throw new UnsupportedOperationException( "Only sourceFileProperty is supported yet" );
+            }
+
+            String sourceFileProperty = copyFile.getSourceFileProperty();
+            RelativePath targetFile = new RelativePath( true, copyFile.getTargetFile().split( "/" ) );
+
+            String targetFileId = fileId( pathID( targetFile.getSegments() ), targetFile.getLastName() );
+
+            Node copyFilesComponent = getComponent( installDir, "copyFiles" );
+            Element copyFileElement = getOrCreateChildById( copyFilesComponent, "CopyFile", targetFileId );
+            addAttributeIfNotExists( copyFileElement, "DestinationDirectory", targetFile.getParent().getPathString() );
+            addAttributeIfNotExists( copyFileElement, "DestinationName", targetFile.getLastName() );
+            addAttributeIfNotExists( copyFileElement, "SourceProperty", sourceFileProperty );
+
+            getOrCreateChild( copyFilesComponent, "CreateFolder" );
+        } );
     }
 
     /**
